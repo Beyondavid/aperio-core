@@ -8,13 +8,19 @@ const OUT = "public";
 function csv(path) {
   const [head, ...lines] = readFileSync(path, "utf8").trim().split("\n");
   const cols = head.split(",");
-  return lines.map((l) => Object.fromEntries(l.split(",").map((v, i) => [cols[i], isNaN(v) ? v : Number(v)])));
+  return lines.map((l) => Object.fromEntries(l.split(",").map((v, i) => {
+    // an empty cell would otherwise become 0 and print as "same day"
+    if (v.trim() === "") assert.fail(`empty ${cols[i]} cell in ${path}`);
+    return [cols[i], isNaN(v) ? v : Number(v)];
+  })));
 }
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const num = (n) => n.toLocaleString("en-US");
 const pct = (n) => Math.round(n * 100) + "%";
 const days = (d) => (d === 0 ? "same day" : d < 1 ? "under a day" : d === 1 ? "1 day" : `${+d.toFixed(1)} days`);
+// for "took over X" / "more than X": round down so the claim never overstates the data
+const over = (d) => days(Math.floor(d));
 const bar = (v, max, label) => `<div class="bar"><span style="width:${((v / max) * 80).toFixed(1)}%" aria-hidden="true"></span><b>${label}</b></div>`;
 
 function page({ title, description, path, body }) {
@@ -41,6 +47,16 @@ ${body}
 }
 
 // ---- Los Angeles 311 report ----
+// formatter checks: these strings are published claims
+assert.equal(days(0), "same day");
+assert.equal(days(0.7), "under a day");
+assert.equal(days(1), "1 day");
+assert.equal(days(65.5), "65.5 days");
+assert.equal(over(6.5), "6 days");
+assert.equal(over(6.8), "6 days");
+assert.equal(over(168.3), "168 days");
+assert.equal(pct(0.472), "47%");
+
 const dir = "data/la-311-2025";
 const services = csv(`${dir}/services.csv`);
 const lights = csv(`${dir}/streetlights-by-district.csv`);
@@ -54,6 +70,12 @@ assert.equal(lights.reduce((s, r) => s + r.still_open, 0), sl.still_open);
 assert.ok(dump.reports - dumping.reduce((s, r) => s + r.reports, 0) <= 5, "dumping districts don't add up");
 assert.ok(sl.still_open_share > 0.4 && sl.still_open_share < 0.5, 'headline says "nearly half"');
 assert.equal(Math.max(...services.map((r) => r.median_days)), sl.median_days, "streetlights must be the slowest");
+assert.ok(services.every((r) => r.p90_days >= 1), 'over() reads wrong below one day ("over same day")');
+// section headings
+const shares = lights.map((r) => r.still_open_share), dumpReports = dumping.map((r) => r.reports);
+assert.ok(Math.max(...shares) - Math.min(...shares) > 0.25, '"depends heavily on the district"');
+assert.ok(Math.max(...dumpReports) >= 3 * Math.min(...dumpReports), '"reported unevenly"');
+assert.ok(Math.max(...dumping.map((r) => r.median_days)) - Math.min(...dumping.map((r) => r.median_days)) < 2, '"about the same speed everywhere"');
 
 const byMedian = [...services].sort((a, b) => b.median_days - a.median_days);
 const maxMedian = byMedian[0].median_days;
@@ -69,7 +91,7 @@ const la = page({
   body: `<header class="report">
 <h1>Nearly half the streetlights Angelenos reported broken in 2025 are still waiting on the city</h1>
 <p class="byline">How is Los Angeles doing? An independent Aperio report, from the city's own 311 records. Published October 2026.</p>
-<p class="lede">Residents filed ${num(sl.reports)} broken-streetlight reports last year. ${num(sl.still_open)} of them, or ${pct(sl.still_open_share)}, are still marked open. The ones the city did close took a median of ${days(sl.median_days)}, and one in ten took more than ${days(Math.round(sl.p90_days))}. Most other requests move far faster: ${pct(graffiti.within_3_days_share)} of graffiti reports close within three days, and dumped items are picked up in a median of ${days(dump.median_days)}.</p>
+<p class="lede">Residents filed ${num(sl.reports)} broken-streetlight reports last year. ${num(sl.still_open)} of them, or ${pct(sl.still_open_share)}, are still marked open. The ones the city did close took a median of ${days(sl.median_days)}, and one in ten took more than ${over(sl.p90_days)}. Most other requests move far faster: ${pct(graffiti.within_3_days_share)} of graffiti reports close within three days, and dumped items are picked up in a median of ${days(dump.median_days)}.</p>
 </header>
 
 <section id="services">
@@ -78,7 +100,7 @@ const la = page({
 <div class="table-wrap"><table>
 <thead><tr><th scope="col">Service</th><th scope="col">Median time to close</th><th scope="col" class="r">Slowest 10% took over</th><th scope="col" class="r">Reports</th><th scope="col" class="r">Still open</th></tr></thead>
 <tbody>
-${byMedian.map((r) => `<tr${r === sl ? ' class="hl"' : ""}><th scope="row">${esc(r.service)}</th><td class="bar-cell">${bar(r.median_days, maxMedian, days(r.median_days))}</td><td class="r">${days(Math.round(r.p90_days))}</td><td class="r">${num(r.reports)}</td><td class="r">${num(r.still_open)}</td></tr>`).join("\n")}
+${byMedian.map((r) => `<tr${r === sl ? ' class="hl"' : ""}><th scope="row">${esc(r.service)}</th><td class="bar-cell">${bar(r.median_days, maxMedian, days(r.median_days))}</td><td class="r">${over(r.p90_days)}</td><td class="r">${num(r.reports)}</td><td class="r">${num(r.still_open)}</td></tr>`).join("\n")}
 </tbody></table></div>
 </section>
 

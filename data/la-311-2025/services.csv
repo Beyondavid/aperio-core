@@ -1,0 +1,6 @@
+service,reports,median_days,p90_days,within_3_days_share,still_open,still_open_share
+Bulky item pickup,167524,2,6.5,0.632,1477,0.009
+Graffiti removal,138340,0,4.3,0.864,2573,0.019
+Illegal dumping,32751,1.9,6.8,0.63,1946,0.059
+Broken streetlights,14474,65.5,168.3,0.053,6836,0.472
+Dead animal removal,6509,0.7,1.1,0.997,5,0.001

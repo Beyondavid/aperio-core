@@ -1,0 +1,7 @@
+{
+  "name": "aperio-core",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

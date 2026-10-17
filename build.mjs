@@ -47,6 +47,17 @@ ${body}
 }
 
 // ---- Los Angeles 311 report ----
+// provenance shown in each report's method section; the build stops if any of it is missing
+function readSource(path) {
+  const s = JSON.parse(readFileSync(path, "utf8"));
+  for (const k of ["name", "publisher", "id", "portal", "url", "pulled", "cityUpdated"]) assert.ok(String(s[k] ?? "").trim(), `${path}: missing "${k}"`);
+  assert.match(s.url, /^https:\/\//, `${path}: url must be https`);
+  for (const k of ["pulled", "cityUpdated"]) assert.match(s[k], /^\d{4}-\d{2}-\d{2}$/, `${path}: "${k}" must be YYYY-MM-DD`);
+  assert.ok(s.cityUpdated <= s.pulled, `${path}: city update is after the pull date`);
+  return s;
+}
+const date = (iso, opts = { month: "long", day: "numeric", year: "numeric" }) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" });
+
 // formatter checks: these strings are published claims
 assert.equal(days(0), "same day");
 assert.equal(days(0.7), "under a day");
@@ -56,11 +67,13 @@ assert.equal(over(6.5), "6 days");
 assert.equal(over(6.8), "6 days");
 assert.equal(over(168.3), "168 days");
 assert.equal(pct(0.472), "47%");
+assert.equal(date("2026-10-16"), "October 16, 2026");
 
 const dir = "data/la-311-2025";
 const services = csv(`${dir}/services.csv`);
 const lights = csv(`${dir}/streetlights-by-district.csv`);
 const dumping = csv(`${dir}/dumping-by-district.csv`);
+const source = readSource(`${dir}/source.json`);
 const svc = (name) => services.find((r) => r.service === name) ?? assert.fail(`missing service ${name}`);
 const sl = svc("Broken streetlights"), graffiti = svc("Graffiti removal"), dump = svc("Illegal dumping");
 
@@ -126,7 +139,7 @@ ${byDistrict.map((r) => `<tr${r.reports === maxDump ? ' class="hl"' : ""}><th sc
 
 <section id="method" class="notes">
 <h2>How we did this</h2>
-<p>Every figure comes from the City of Los Angeles's own <a href="https://data.lacity.org/A-Well-Run-City/MyLA311-Service-Request-Data-2025/h73f-gn57">MyLA311 Service Request Data for 2025</a> (dataset h73f-gn57 on data.lacity.org). Aperio downloaded the records on October 16, 2026, when the city had last updated them on October 12, and measured each request from the time it was created to the time it was closed. Streetlight figures combine single and multiple streetlight reports.</p>
+<p>Every figure comes from the ${esc(source.publisher)}'s own <a href="${esc(source.url)}">${esc(source.name)}</a> (dataset ${esc(source.id)} on ${esc(source.portal)}). Aperio downloaded the records on ${date(source.pulled)}, when the city had last updated them on ${date(source.cityUpdated)}, and measured each request from the time it was created to the time it was closed. Streetlight figures combine single and multiple streetlight reports.</p>
 <p>A closed request is not proof the problem was fixed, and an open one is not proof it wasn't. The city's records only show the status in its system. Some streetlights marked open may have been repaired without the request being closed.</p>
 <p>Potholes and other street repairs are not part of this dataset. They run through a separate city system that is not published here. We left out homeless encampment reports, because closing one reflects outreach and policy decisions rather than a pickup, so timing them would mislead.</p>
 <p>The figures behind this page: <a href="/data/la-311-2025/services.csv">services</a>, <a href="/data/la-311-2025/streetlights-by-district.csv">streetlights by district</a>, <a href="/data/la-311-2025/dumping-by-district.csv">dumping by district</a> (CSV).</p>
